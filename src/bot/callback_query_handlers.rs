@@ -25,7 +25,13 @@ pub async fn callback_query_handler(bot: Bot, q: CallbackQuery) -> CallbackRetur
             else {
                 return Ok(());
             };
-            mpd.insert(song, 0)?;
+            let Some(current) = mpd.currentsong()? else {
+                return Ok(());
+            };
+            let Some(current) = current.place else {
+                return Ok(());
+            };
+            mpd.insert(song, current.pos as usize + 1)?;
             bot.answer_callback_query(q.id).await?;
             let msg = q.message.unwrap();
             bot.edit_message_text(msg.chat().id, msg.id(), "✅ Song added!")

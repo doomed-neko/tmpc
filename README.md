@@ -36,10 +36,11 @@ tmpc supports all of those commands:
 git clone https://doomed-neko/tmpc && cd tmpc
 ```
 
-### 2. Set your token
+### 2. Set your token and create `uuid` folder
 
 ```bash
 echo YOUR_TOKEN > token
+mkdir uuid
 ```
 
 ### 3. Run the code
