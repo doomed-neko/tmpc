@@ -3,6 +3,7 @@ use teloxide::{dispatching::dialogue::InMemStorage, prelude::*};
 mod bot;
 
 pub const MPD_SOCKET_PATH: &str = "/home/pasta/.config/mpd/socket";
+pub const REACTION_EMOJI: &str = "🍾";
 
 #[tokio::main]
 async fn main() {

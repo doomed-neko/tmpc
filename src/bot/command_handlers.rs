@@ -14,7 +14,7 @@ use teloxide::{
     utils::command::BotCommands,
 };
 
-use crate::MPD_SOCKET_PATH;
+use crate::{MPD_SOCKET_PATH, REACTION_EMOJI};
 
 use super::Commands;
 type HandlerResult = Result<(), Box<dyn Error + Send + Sync>>;
@@ -38,7 +38,7 @@ pub async fn clear(bot: Bot, msg: Message) -> HandlerResult {
             info!("Cleared queue");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: "❤️".into()
+                    emoji: REACTION_EMOJI.into(),
                 }])
                 .await?;
         }
@@ -56,7 +56,7 @@ pub async fn play(bot: Bot, msg: Message) -> HandlerResult {
             info!("Toggled playback");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: "❤️".into()
+                    emoji: REACTION_EMOJI.into(),
                 }])
                 .await?;
         }
@@ -75,7 +75,7 @@ pub async fn next(bot: Bot, msg: Message) -> HandlerResult {
             info!("Next song");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: "❤️".into()
+                    emoji: REACTION_EMOJI.into(),
                 }])
                 .await?;
         }
@@ -94,7 +94,7 @@ pub async fn prev(bot: Bot, msg: Message) -> HandlerResult {
             info!("Prev song");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: "❤️".into()
+                    emoji: REACTION_EMOJI.into(),
                 }])
                 .await?;
         }
@@ -113,7 +113,7 @@ pub async fn shuffle(bot: Bot, msg: Message) -> HandlerResult {
             info!("Prev song");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: "❤️".into()
+                    emoji: REACTION_EMOJI.into(),
                 }])
                 .await?;
         }
@@ -207,7 +207,7 @@ pub async fn add_yt(bot: Bot, msg: Message, url: String) -> HandlerResult {
     }
     bot.set_message_reaction(msg.chat.id, msg.id)
         .reaction(vec![ReactionType::Emoji {
-            emoji: "❤️".into()
+            emoji: REACTION_EMOJI.into(),
         }])
         .await?;
     let url = if url.contains("youtu.be/") {
