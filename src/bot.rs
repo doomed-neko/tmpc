@@ -42,7 +42,7 @@ enum Commands {
     Search(String),
     #[command(description = "Add random songs")]
     AddRand(String),
-    #[command(description = "Add all songs to db")]
+    #[command(description = "Add all songs to queue")]
     AddAll,
     #[command(description = "Clear the queue")]
     Clear,
