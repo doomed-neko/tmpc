@@ -21,6 +21,7 @@ tmpc supports all of those commands:
 - addrand — Add random songs
 - addall — Add all songs to db
 - clear — Clear the queue
+- shuffle — Shuffle the queue
 
 ## Set up
 
