@@ -47,3 +47,11 @@ echo YOUR_TOKEN > token
 ```bash
 RUST_LOG=warn cargo r -r
 ```
+
+## Screenshots
+
+![current command](pics/current.png)
+![play command](pics/play.png)
+![queue command](pics/queue.png)
+![search command](pics/search.png)
+![stats command](pics/stats.png)

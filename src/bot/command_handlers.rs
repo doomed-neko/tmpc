@@ -14,6 +14,8 @@ use teloxide::{
     utils::command::BotCommands,
 };
 
+use crate::MPD_SOCKET_PATH;
+
 use super::Commands;
 type HandlerResult = Result<(), Box<dyn Error + Send + Sync>>;
 
@@ -30,7 +32,7 @@ pub async fn help(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn clear(bot: Bot, msg: Message) -> HandlerResult {
-    let mut conn = Client::new(UnixStream::connect("/home/pasta/.config/mpd/socket")?)?;
+    let mut conn = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     match conn.clear() {
         Ok(_) => {
             info!("Cleared queue");
@@ -67,7 +69,7 @@ pub async fn play(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn next(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect("/home/pasta/.config/mpd/socket")?)?;
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     match mpd.next() {
         Ok(_) => {
             info!("Next song");
@@ -86,7 +88,7 @@ pub async fn next(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn prev(bot: Bot, msg: Message) -> HandlerResult {
-    let mut conn = Client::new(UnixStream::connect("/home/pasta/.config/mpd/socket")?)?;
+    let mut conn = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     match conn.prev() {
         Ok(_) => {
             info!("Prev song");
@@ -105,7 +107,7 @@ pub async fn prev(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect("/home/pasta/.config/mpd/socket")?)?;
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let song = match mpd.currentsong()? {
         Some(t) => t,
         None => {
@@ -136,7 +138,7 @@ pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn queue(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect("/home/pasta/.config/mpd/socket")?)?;
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let Some(current) = mpd.currentsong()? else {
         return Ok(());
     };
@@ -231,7 +233,7 @@ fn humanize_duration(dur: Duration) -> String {
 }
 
 pub async fn stats(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect("/home/pasta/.config/mpd/socket")?)?;
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let stats = mpd.stats()?;
     let artists = stats.artists;
     let albums = stats.albums;
@@ -251,7 +253,7 @@ total duration: {db_playtime}"#
 }
 
 pub async fn search(bot: Bot, msg: Message, query: String) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect("/home/pasta/.config/mpd/socket")?)?;
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let mut q = Query::new();
     let query_mpd = q.and(mpd::Term::Tag("Title".into()), &query);
     let buttons = mpd
@@ -301,7 +303,7 @@ pub async fn add_rand(bot: Bot, msg: Message, amount: String) -> HandlerResult {
     Ok(())
 }
 pub async fn add_all(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect("/home/pasta/.config/mpd/socket")?)?;
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let stats = mpd.stats()?;
     Command::new("rmpc").arg("add").arg("/").output()?;
     bot.send_message(

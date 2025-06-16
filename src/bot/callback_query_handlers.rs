@@ -2,10 +2,12 @@ use log::warn;
 use mpd::{Client, Query};
 use std::{error::Error, fs, os::unix::net::UnixStream, path::PathBuf};
 use teloxide::prelude::*;
+
+use crate::MPD_SOCKET_PATH;
 pub type CallbackReturn = Result<(), Box<dyn Error + Send + Sync>>;
 
 pub async fn callback_query_handler(bot: Bot, q: CallbackQuery) -> CallbackReturn {
-    let mut mpd = Client::new(UnixStream::connect("/home/pasta/.config/mpd/socket")?)?;
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let Some(mut data) = q.data else {
         return Ok(());
     };
