@@ -272,6 +272,15 @@ total duration: {db_playtime}"#
 }
 
 pub async fn search(bot: Bot, msg: Message, query: String) -> HandlerResult {
+    if query.is_empty() {
+        bot.send_message(
+            msg.chat.id,
+            "No search query\nUsage:\n    `/search enter sandman`",
+        )
+        .parse_mode(teloxide::types::ParseMode::MarkdownV2)
+        .await?;
+        return Ok(());
+    }
     let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let mut q = Query::new();
     let query_mpd = q.and(mpd::Term::Tag("Title".into()), &query);
