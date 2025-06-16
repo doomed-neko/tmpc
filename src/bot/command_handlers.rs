@@ -88,8 +88,27 @@ pub async fn next(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn prev(bot: Bot, msg: Message) -> HandlerResult {
-    let mut conn = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
-    match conn.prev() {
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    match mpd.prev() {
+        Ok(_) => {
+            info!("Prev song");
+            bot.set_message_reaction(msg.chat.id, msg.id)
+                .reaction(vec![ReactionType::Emoji {
+                    emoji: "❤️".into()
+                }])
+                .await?;
+        }
+        Err(t) => {
+            error!("{}", t);
+        }
+    };
+
+    Ok(())
+}
+
+pub async fn shuffle(bot: Bot, msg: Message) -> HandlerResult {
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    match mpd.shuffle(..) {
         Ok(_) => {
             info!("Prev song");
             bot.set_message_reaction(msg.chat.id, msg.id)

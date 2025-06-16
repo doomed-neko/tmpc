@@ -46,6 +46,8 @@ enum Commands {
     AddAll,
     #[command(description = "Clear the queue")]
     Clear,
+    #[command(description = "Shuffle the queue")]
+    Shuffle,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -67,6 +69,7 @@ pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'stat
         .branch(case![Commands::Search(query)].endpoint(search))
         .branch(case![Commands::AddRand(amount)].endpoint(add_rand))
         .branch(case![Commands::AddAll].endpoint(add_all))
+        .branch(case![Commands::Shuffle].endpoint(shuffle))
         .branch(case![Commands::AddYt(url)].endpoint(add_yt));
     let callback_query_handler = Update::filter_callback_query().endpoint(callback_query_handler);
     let msg_handler = Update::filter_message().branch(cmd_handler);
