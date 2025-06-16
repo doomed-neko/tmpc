@@ -325,6 +325,7 @@ pub async fn add_all(bot: Bot, msg: Message) -> HandlerResult {
     let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let stats = mpd.stats()?;
     Command::new("rmpc").arg("add").arg("/").output()?;
+    Command::new("rmpc").arg("togglepause").output()?;
     bot.send_message(
         msg.chat.id,
         format!("Successfully added {} songs to the queue", stats.songs),
