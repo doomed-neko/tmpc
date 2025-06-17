@@ -218,7 +218,7 @@ pub async fn add_yt(bot: Bot, msg: Message, url: String) -> HandlerResult {
     };
     match Command::new("fish")
         .arg("-c")
-        .arg(format!("rmpc addyt {url}"))
+        .arg(format!("rmpc addyt {url} -p +0"))
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())
         .spawn()
