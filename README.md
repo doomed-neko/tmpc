@@ -41,7 +41,7 @@ git clone https://doomed-neko/tmpc && cd tmpc
 ### 2. Set your token and create `uuid` folder
 
 ```bash
-echo YOUR_TOKEN > token
+export TMPC_TOKEN=YOUR_TOKEN
 mkdir uuid
 ```
 
