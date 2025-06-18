@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dotenv = "0.15.0"
 humanize-duration = "0.0.7"
 log = "0.4.27"
 mpd = "0.1.0"

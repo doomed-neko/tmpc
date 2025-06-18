@@ -11,6 +11,8 @@ pub const REACTION_EMOJI: &str = "🍾";
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
+    dotenv::dotenv().ok();
+
     let Ok(token) = env::var("TMPC_TOKEN") else {
         error!("No token defined");
         return;
