@@ -8,20 +8,21 @@ The name stands for Telegram Music Player Client.
 
 tmpc supports all of those commands:
 
-- start — Start the bot
-- help — Show this help
-- play — Play/Pause music
-- next — Switch to next track
-- prev — Switch to previous track
-- current — Show information about current song
-- queue — Show songs in the queue
-- addyt — Add a song from youtube
-- stats — Show DB stats
-- search — Search in the db
-- addrand — Add random songs
-- addall — Add all songs to db
-- clear — Clear the queue
-- shuffle — Shuffle the queue
+- /start — Start the bot
+- /help — Show this help
+- /play, /p — Play/Pause music
+- /next, /n — Switch to next track
+- /prev — Switch to previous track
+- /current, /np — Show information about current song
+- /queue, /q — Show songs in the queue
+- /addyt, /yt — Add a song from youtube
+- /search, /s — Search in the db
+- /addrand, /rand — Add random songs
+- /addall, /all — Add all songs to queue
+- /addfile, /file — Add an audio file to queue
+- /clear — Clear the queue
+- /shuffle — Shuffle the queue
+- /stats — Show DB stats
 
 ## Set up
 
