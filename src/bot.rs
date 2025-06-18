@@ -24,30 +24,30 @@ enum Commands {
     Start,
     #[command(description = "Show this help")]
     Help,
-    #[command(description = "Play/Pause music")]
+    #[command(description = "Play/Pause music", aliases=["p"])]
     Play,
-    #[command(description = "Switch to next track")]
+    #[command(description = "Switch to next track", aliases=["n"])]
     Next,
     #[command(description = "Switch to previous track")]
     Prev,
-    #[command(description = "Show information about current song")]
+    #[command(description = "Show information about current song", aliases=["np"])]
     Current,
-    #[command(description = "Show songs in the queue")]
+    #[command(description = "Show songs in the queue", aliases=["q"])]
     Queue,
-    #[command(description = "Add a song from youtube")]
-    AddYt(String),
-    #[command(description = "Show DB stats")]
-    Stats,
-    #[command(description = "Search in the db")]
+    #[command(description = "Add a song from youtube", aliases=["yt"])]
+    AddYt,
+    #[command(description = "Search in the db", aliases=["s"])]
     Search(String),
-    #[command(description = "Add random songs")]
+    #[command(description = "Add random songs", aliases=["rand"])]
     AddRand(String),
-    #[command(description = "Add all songs to queue")]
+    #[command(description = "Add all songs to queue", aliases=["all"])]
     AddAll,
     #[command(description = "Clear the queue")]
     Clear,
     #[command(description = "Shuffle the queue")]
     Shuffle,
+    #[command(description = "Show DB stats")]
+    Stats,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -70,9 +70,9 @@ pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'stat
         .branch(case![Commands::AddRand(amount)].endpoint(add_rand))
         .branch(case![Commands::AddAll].endpoint(add_all))
         .branch(case![Commands::Shuffle].endpoint(shuffle))
-        .branch(case![Commands::AddYt(url)].endpoint(add_yt));
-    let callback_query_handler = Update::filter_callback_query().endpoint(callback_query_handler);
+        .branch(case![Commands::AddYt].endpoint(add_yt));
     let msg_handler = Update::filter_message().branch(cmd_handler);
+    let callback_query_handler = Update::filter_callback_query().endpoint(callback_query_handler);
     dialogue::enter::<Update, InMemStorage<BotState>, BotState, _>()
         .branch(msg_handler)
         .branch(callback_query_handler)
