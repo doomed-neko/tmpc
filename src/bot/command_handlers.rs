@@ -195,36 +195,53 @@ pub async fn queue(bot: Bot, msg: Message) -> HandlerResult {
     if queue_formatted.is_empty() {
         queue_formatted = "No song in queue".into();
     }
-    let text = format!("🎛Queue length: {}\n{queue_formatted}", queue_len);
+    let text = format!("🎛Queue length: {}\n\n{queue_formatted}", queue_len);
     info!("Queue info sent");
     bot.send_message(msg.chat.id, text).await?;
 
     Ok(())
 }
 
-pub async fn add_yt(bot: Bot, msg: Message, url: String) -> HandlerResult {
-    if url.is_empty() {
-        bot.send_message(msg.chat.id, "No url provided\nUsage:\n        /addyt <URL>\nExample:\n        /addyt https://www.youtube.com/watch?v=3ehWXsLtPoY")
-            .link_preview_options(LinkPreviewOptions{ is_disabled: true,url:None, prefer_small_media:true, prefer_large_media: false, show_above_text:true })
+pub async fn add_yt(bot: Bot, msg: Message) -> HandlerResult {
+    let Some(Some(url)) = msg
+        .reply_to_message()
+        .map(|x| x.text().map(|x| x.to_string()))
+    else {
+        bot.send_message(
+            msg.chat.id,
+            "No url provided\nReply to a message with a video url to add it to queue",
+        )
         .await?;
         return Ok(());
-    }
-    bot.set_message_reaction(msg.chat.id, msg.id)
-        .reaction(vec![ReactionType::Emoji {
-            emoji: REACTION_EMOJI.into(),
-        }])
-        .await?;
+    };
+
     let url = if url.contains("youtu.be/") {
         url.replace("?", "&")
             .replace("youtu.be/", "youtube.com/watch?v=")
     } else {
         url
     };
-    match Command::new("fish")
-        .arg("-c")
-        .arg(format!("rmpc addyt {url} -p +0"))
-        .stderr(Stdio::inherit())
-        .stdout(Stdio::inherit())
+
+    bot.set_message_reaction(msg.chat.id, msg.id)
+        .reaction(vec![ReactionType::Emoji {
+            emoji: REACTION_EMOJI.into(),
+        }])
+        .await?;
+    bot.send_message(
+        msg.chat.id,
+        "⏳ Downloading video... \nPlease wait, this might take a minute",
+    )
+    .reply_parameters(ReplyParameters {
+        message_id: msg.id,
+        ..Default::default()
+    })
+    .await?;
+
+    match Command::new("rmpc")
+        .arg("addyt")
+        .arg("-p")
+        .arg("+0")
+        .arg(url)
         .spawn()
     {
         Ok(mut f) => {
@@ -320,8 +337,12 @@ pub async fn search(bot: Bot, msg: Message, query: String) -> HandlerResult {
     Ok(())
 }
 
-#[allow(unused_variables)]
 pub async fn add_rand(bot: Bot, msg: Message, amount: String) -> HandlerResult {
+    let amount = if amount.is_empty() {
+        "1".into()
+    } else {
+        amount
+    };
     Command::new("rmpc")
         .arg("addrandom")
         .arg("song")
@@ -337,8 +358,12 @@ pub async fn add_rand(bot: Bot, msg: Message, amount: String) -> HandlerResult {
 pub async fn add_all(bot: Bot, msg: Message) -> HandlerResult {
     let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let stats = mpd.stats()?;
-    Command::new("rmpc").arg("add").arg("/").output()?;
-    Command::new("rmpc").arg("togglepause").output()?;
+    let all_songs = Song {
+        file: "/".into(),
+        ..Default::default()
+    };
+    mpd.push(all_songs)?;
+    mpd.toggle_pause()?;
     bot.send_message(
         msg.chat.id,
         format!("Successfully added {} songs to the queue", stats.songs),
