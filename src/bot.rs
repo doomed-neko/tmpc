@@ -42,6 +42,8 @@ enum Commands {
     AddRand(String),
     #[command(description = "Add all songs to queue", aliases=["all"])]
     AddAll,
+    #[command(description = "Add an audio file to queue", aliases=["file"])]
+    AddFile,
     #[command(description = "Clear the queue")]
     Clear,
     #[command(description = "Shuffle the queue")]
@@ -70,6 +72,7 @@ pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'stat
         .branch(case![Commands::AddRand(amount)].endpoint(add_rand))
         .branch(case![Commands::AddAll].endpoint(add_all))
         .branch(case![Commands::Shuffle].endpoint(shuffle))
+        .branch(case![Commands::AddFile].endpoint(add_file))
         .branch(case![Commands::AddYt].endpoint(add_yt));
     let msg_handler = Update::filter_message().branch(cmd_handler);
     let callback_query_handler = Update::filter_callback_query().endpoint(callback_query_handler);

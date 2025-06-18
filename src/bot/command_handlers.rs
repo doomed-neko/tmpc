@@ -1,23 +1,27 @@
 use log::{error, info};
-use mpd::{Client, Query, search::Window};
+use mpd::{Client, Query, Song, search::Window};
 use std::{
+    env::temp_dir,
     error::Error,
-    fs,
+    fs::{self, DirBuilder},
     os::unix::net::UnixStream,
     path::PathBuf,
-    process::{Command, Stdio},
+    process::Command,
     time::Duration,
 };
 use teloxide::{
+    net::Download,
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, ReactionType},
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, ReactionType, ReplyParameters},
     utils::command::BotCommands,
 };
+use tokio::fs::File as AsyncFile;
 
 use crate::{MPD_SOCKET_PATH, REACTION_EMOJI};
 
 use super::Commands;
-type HandlerResult = Result<(), Box<dyn Error + Send + Sync>>;
+type HandlerResultErr = Box<dyn Error + Send + Sync>;
+type HandlerResult = Result<(), HandlerResultErr>;
 
 pub async fn start(bot: Bot, msg: Message) -> HandlerResult {
     bot.send_message(msg.chat.id, Commands::descriptions().to_string())
@@ -340,6 +344,97 @@ pub async fn add_all(bot: Bot, msg: Message) -> HandlerResult {
         format!("Successfully added {} songs to the queue", stats.songs),
     )
     .await?;
+
+    Ok(())
+}
+
+pub async fn add_file(bot: Bot, msg: Message) -> HandlerResult {
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    {
+        let mut tmp = temp_dir();
+        tmp.push("tmpc");
+        if !tmp.exists() {
+            DirBuilder::new().create(tmp)?;
+        }
+    }
+
+    let Some(Some(audio)) = msg.reply_to_message().map(|x| x.audio()) else {
+        bot.send_message(
+            msg.chat.id,
+            "❌ No audio provided\nReply to a message with an audio file to add it to queue",
+        )
+        .await?;
+        return Ok(());
+    };
+
+    let file = bot.get_file(&audio.file.id).await?;
+    if file.size > 20 * 1024 * 1024 {
+        bot.send_message(
+            msg.chat.id,
+            "❌ File too big, can't download files larger than 20MB",
+        )
+        .await?;
+        return Ok(());
+    }
+    let file_path = {
+        let Some(file_name) = &audio.file_name else {
+            bot.send_message(msg.chat.id, "❌ Invalid audio file found")
+                .await?;
+            return Ok(());
+        };
+        let mut path = temp_dir();
+        path.push("tmpc");
+        path.push(file_name);
+        path
+    };
+    let song = Song {
+        file: file_path.to_string_lossy().to_string(),
+        ..Default::default()
+    };
+
+    let msg_id = msg.id;
+    let chat_id = msg.chat.id;
+    if !file_path.exists() {
+        bot.send_message(
+            msg.chat.id,
+            "⏳ Downloading the file, this might take some time",
+        )
+        .await?;
+        let mut output_file = AsyncFile::create(file_path.clone()).await?;
+        if let Err(e) = bot.download_file(&file.path, &mut output_file).await {
+            match e {
+                teloxide::DownloadError::Network(error) => {
+                    error!("{}", error);
+                    bot.send_message(
+                        chat_id,
+                        "❌ Failed to download file due to a Network Error, try again",
+                    )
+                    .reply_parameters(ReplyParameters {
+                        message_id: msg_id,
+                        ..Default::default()
+                    })
+                    .await?;
+                }
+                teloxide::DownloadError::Io(error) => {
+                    error!("{}", error);
+                    bot.send_message(chat_id, "❌ Failed to download file due to an I/O Error")
+                        .reply_parameters(ReplyParameters {
+                            message_id: msg_id,
+                            ..Default::default()
+                        })
+                        .await?;
+                }
+            };
+            return Ok(());
+        }
+    }
+    bot.send_message(chat_id, "✅Song added to queue!")
+        .reply_parameters(ReplyParameters {
+            message_id: msg_id,
+            ..Default::default()
+        })
+        .await?;
+    mpd.push(song)?;
 
     Ok(())
 }
