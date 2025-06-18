@@ -1,5 +1,6 @@
 use log::{error, info};
 use mpd::{Client, Query, Song, search::Window};
+use rand::prelude::IndexedRandom;
 use std::{
     env::temp_dir,
     error::Error,
@@ -55,7 +56,8 @@ pub async fn clear(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn play(bot: Bot, msg: Message) -> HandlerResult {
-    match Command::new("rmpc").arg("togglepause").output() {
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    match mpd.toggle_pause() {
         Ok(_) => {
             info!("Toggled playback");
             bot.set_message_reaction(msg.chat.id, msg.id)
@@ -343,11 +345,25 @@ pub async fn add_rand(bot: Bot, msg: Message, amount: String) -> HandlerResult {
     } else {
         amount
     };
-    Command::new("rmpc")
-        .arg("addrandom")
-        .arg("song")
-        .arg(&amount)
-        .output()?;
+    let Ok(amount) = amount.parse::<usize>() else {
+        bot.send_message(msg.chat.id, "Invalid number").await?;
+        return Ok(());
+    };
+
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH).unwrap()).unwrap();
+    let mut current = mpd
+        .currentsong()?
+        .unwrap_or_default()
+        .place
+        .unwrap_or_default()
+        .pos as usize;
+    let songs = mpd.listall()?;
+    let songs = songs.choose_multiple(&mut rand::rng(), amount).cloned();
+    for song in songs {
+        mpd.insert(song, current)?;
+        current += 1;
+    }
+
     bot.send_message(
         msg.chat.id,
         format!("Successfully added {} random songs to the queue", amount),
