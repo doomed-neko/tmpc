@@ -89,6 +89,30 @@ pub async fn next(bot: Bot, msg: Message) -> HandlerResult {
             error!("{}", t);
         }
     };
+    let Some(song) = mpd.currentsong()? else {
+        return Ok(());
+    };
+    let title = song.title.unwrap_or("Unknown".into());
+    let artist = song.artist.unwrap_or("Unknown".into());
+    let album = song
+        .tags
+        .into_iter()
+        .filter_map(|(name, val)| {
+            if name.to_lowercase().as_str() == "album" {
+                Some(val)
+            } else {
+                None
+            }
+        })
+        .collect::<String>();
+
+    let text = format!("🎵{title}\n👤{artist}\n💿{album}");
+    bot.send_message(msg.chat.id, text)
+        .reply_parameters(ReplyParameters {
+            message_id: msg.id,
+            ..Default::default()
+        })
+        .await?;
 
     Ok(())
 }
@@ -108,6 +132,31 @@ pub async fn prev(bot: Bot, msg: Message) -> HandlerResult {
             error!("{}", t);
         }
     };
+
+    let Some(song) = mpd.currentsong()? else {
+        return Ok(());
+    };
+    let title = song.title.unwrap_or("Unknown".into());
+    let artist = song.artist.unwrap_or("Unknown".into());
+    let album = song
+        .tags
+        .into_iter()
+        .filter_map(|(name, val)| {
+            if name.to_lowercase().as_str() == "album" {
+                Some(val)
+            } else {
+                None
+            }
+        })
+        .collect::<String>();
+
+    let text = format!("🎵{title}\n👤{artist}\n💿{album}");
+    bot.send_message(msg.chat.id, text)
+        .reply_parameters(ReplyParameters {
+            message_id: msg.id,
+            ..Default::default()
+        })
+        .await?;
 
     Ok(())
 }
@@ -132,11 +181,11 @@ pub async fn shuffle(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
+    info!("Current song info sent");
     let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
     let song = match mpd.currentsong()? {
         Some(t) => t,
         None => {
-            info!("Current song info sent");
             bot.send_message(msg.chat.id, "No song playing right now")
                 .await?;
             return Ok(());
