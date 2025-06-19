@@ -74,7 +74,9 @@ pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'stat
         .branch(case![Commands::Shuffle].endpoint(shuffle))
         .branch(case![Commands::AddFile].endpoint(add_file))
         .branch(case![Commands::AddYt].endpoint(add_yt));
-    let msg_handler = Update::filter_message().branch(cmd_handler);
+    let msg_handler = Update::filter_message()
+        .branch(cmd_handler)
+        .endpoint(async || Ok(()));
     let callback_query_handler = Update::filter_callback_query().endpoint(callback_query_handler);
     dialogue::enter::<Update, InMemStorage<BotState>, BotState, _>()
         .branch(msg_handler)

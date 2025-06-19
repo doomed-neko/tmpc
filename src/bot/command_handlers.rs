@@ -477,7 +477,7 @@ pub async fn add_file(bot: Bot, msg: Message) -> HandlerResult {
         .await?;
     let current = mpd.currentsong()?.unwrap_or_default();
     let pos = current.place.unwrap_or_default().pos as usize;
-    mpd.insert(song,pos + 1)?;
+    mpd.insert(song, pos + 1)?;
 
     Ok(())
 }
