@@ -2,6 +2,8 @@ use std::env;
 
 use bot::{BotState, schema};
 use log::error;
+#[cfg(feature = "local")]
+use reqwest::Url;
 use teloxide::{dispatching::dialogue::InMemStorage, prelude::*};
 mod bot;
 
@@ -18,6 +20,8 @@ async fn main() {
         return;
     };
     let bot = Bot::new(token);
+    #[cfg(feature = "local")]
+    let bot = bot.set_api_url(Url::parse("http://127.0.0.1:8080").unwrap());
     Dispatcher::builder(bot, schema())
         .dependencies(dptree::deps![InMemStorage::<BotState>::new()])
         .enable_ctrlc_handler()
