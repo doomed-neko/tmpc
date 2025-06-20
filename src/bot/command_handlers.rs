@@ -10,6 +10,8 @@ use std::{
     process::Command,
     time::Duration,
 };
+#[cfg(feature = "local")]
+use teloxide::types::{FileId, InputFile};
 use teloxide::{
     net::Download,
     prelude::*,
@@ -106,7 +108,7 @@ pub async fn next(bot: Bot, msg: Message) -> HandlerResult {
         })
         .collect::<String>();
 
-    let text = format!("🎵{title}\n👤{artist}\n💿{album}");
+    let text = format!("🎵 {title}\n👤 {artist}\n💿 {album}");
     bot.send_message(msg.chat.id, text)
         .reply_parameters(ReplyParameters {
             message_id: msg.id,
@@ -150,7 +152,7 @@ pub async fn prev(bot: Bot, msg: Message) -> HandlerResult {
         })
         .collect::<String>();
 
-    let text = format!("🎵{title}\n👤{artist}\n💿{album}");
+    let text = format!("🎵 {title}\n👤 {artist}\n💿 {album}");
     bot.send_message(msg.chat.id, text)
         .reply_parameters(ReplyParameters {
             message_id: msg.id,
@@ -205,9 +207,62 @@ pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
         })
         .collect::<String>();
 
-    let text = format!("🎵{title}\n👤{artist}\n💿{album}");
+    let text = format!("🎵 {title}\n👤 {artist}\n💿 {album}");
     bot.send_message(msg.chat.id, text).await?;
 
+    #[cfg(feature = "local")]
+    {
+        tokio::spawn(async move {
+            let file_name = song.file;
+            let Some(file_path) = mpd
+                .mounts()?
+                .into_iter()
+                .filter_map(|x| {
+                    let path = format!("{}/{}", x.storage, file_name);
+                    let path_b = PathBuf::from(&file_name);
+                    if path_b.is_absolute() && path_b.exists() {
+                        return Some(file_name.clone());
+                    }
+                    if PathBuf::from(&path).exists() {
+                        return Some(path);
+                    }
+                    None
+                })
+                .next()
+            else {
+                bot.send_message(msg.chat.id, "Something wrong happened")
+                    .await?;
+                return Ok::<_, HandlerResultErr>(());
+            };
+            info!("Got file path");
+
+            let db = sled::open("DB")?;
+            if let Some(sticker) = db.get(&file_name)? {
+                let sticker = String::from_utf8_lossy(&sticker).to_string();
+                info!("Sending via file id");
+                bot.send_audio(msg.chat.id, InputFile::file_id(FileId(sticker)))
+                    .reply_parameters(ReplyParameters {
+                        message_id: msg.id,
+                        ..Default::default()
+                    })
+                    .await?;
+            } else {
+                info!("Sending via file");
+                bot.send_audio(msg.chat.id, InputFile::file(file_path))
+                    .reply_parameters(ReplyParameters {
+                        message_id: msg.id,
+                        ..Default::default()
+                    })
+                    .await
+                    .map(|x| {
+                        let file_id = x.audio().unwrap().file.id.clone().0;
+                        db.insert(&file_name, file_id.as_bytes())
+                    })??;
+            }
+            Ok(())
+        })
+        .await??;
+    }
     Ok(())
 }
 
@@ -457,7 +512,7 @@ pub async fn add_file(bot: Bot, msg: Message) -> HandlerResult {
         return Ok(());
     };
 
-    let file = bot.get_file(&audio.file.id).await?;
+    let file = bot.get_file(audio.file.id.clone()).await?;
     if file.size > 20 * 1024 * 1024 {
         bot.send_message(
             msg.chat.id,
