@@ -241,6 +241,8 @@ pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
                 let sticker = String::from_utf8_lossy(&sticker).to_string();
                 info!("Sending via file id");
                 bot.send_audio(msg.chat.id, InputFile::file_id(FileId(sticker)))
+                    .performer(artist)
+                    .title(title)
                     .reply_parameters(ReplyParameters {
                         message_id: msg.id,
                         ..Default::default()
@@ -249,6 +251,8 @@ pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
             } else {
                 info!("Sending via file");
                 bot.send_audio(msg.chat.id, InputFile::file(file_path))
+                    .performer(artist)
+                    .title(title)
                     .reply_parameters(ReplyParameters {
                         message_id: msg.id,
                         ..Default::default()

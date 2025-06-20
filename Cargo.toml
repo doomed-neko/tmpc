@@ -17,5 +17,5 @@ tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread"] }
 uuid = { version = "1.17.0", features = ["v7"] }
 
 [features]
-default = ["local"]
+default = []
 local = ["dep:reqwest"]
