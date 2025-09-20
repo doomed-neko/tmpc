@@ -5,14 +5,17 @@ use teloxide::{
         UpdateFilterExt, UpdateHandler,
         dialogue::{self, InMemStorage},
     },
-    dptree::case,
+    dptree::{self, case},
     filter_command,
     macros::BotCommands,
-    types::Update,
+    types::{Message, Update},
 };
+
+use crate::OWNER_ID;
 
 mod callback_query_handlers;
 mod command_handlers;
+mod utils;
 
 #[derive(BotCommands, Clone)]
 #[command(
@@ -50,6 +53,8 @@ enum Commands {
     Shuffle,
     #[command(description = "Show DB stats")]
     Stats,
+    #[command(description = "Save file id for song")]
+    Save,
 }
 
 #[derive(Default, Clone, Copy)]
@@ -59,21 +64,25 @@ pub enum BotState {
 }
 pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     let cmd_handler = filter_command::<Commands, _>()
+        .branch(
+            dptree::filter(|msg: Message| msg.from.is_some_and(|x| x.id == OWNER_ID))
+                .branch(case![Commands::Play].endpoint(play))
+                .branch(case![Commands::Next].endpoint(next))
+                .branch(case![Commands::Clear].endpoint(clear))
+                .branch(case![Commands::AddYt].endpoint(add_yt))
+                .branch(case![Commands::AddRand(amount)].endpoint(add_rand))
+                .branch(case![Commands::AddAll].endpoint(add_all))
+                .branch(case![Commands::Shuffle].endpoint(shuffle))
+                .branch(case![Commands::AddFile].endpoint(add_file))
+                .branch(case![Commands::Search(query)].endpoint(search))
+                .branch(case![Commands::Prev].endpoint(prev)),
+        )
         .branch(case![Commands::Start].endpoint(start))
         .branch(case![Commands::Help].endpoint(help))
-        .branch(case![Commands::Play].endpoint(play))
-        .branch(case![Commands::Next].endpoint(next))
-        .branch(case![Commands::Prev].endpoint(prev))
         .branch(case![Commands::Current].endpoint(curr))
         .branch(case![Commands::Queue].endpoint(queue))
         .branch(case![Commands::Stats].endpoint(stats))
-        .branch(case![Commands::Clear].endpoint(clear))
-        .branch(case![Commands::Search(query)].endpoint(search))
-        .branch(case![Commands::AddRand(amount)].endpoint(add_rand))
-        .branch(case![Commands::AddAll].endpoint(add_all))
-        .branch(case![Commands::Shuffle].endpoint(shuffle))
-        .branch(case![Commands::AddFile].endpoint(add_file))
-        .branch(case![Commands::AddYt].endpoint(add_yt));
+        .branch(case![Commands::Save].endpoint(save));
     let msg_handler = Update::filter_message().branch(cmd_handler);
     let callback_query_handler = Update::filter_callback_query().endpoint(callback_query_handler);
     dialogue::enter::<Update, InMemStorage<BotState>, BotState, _>()

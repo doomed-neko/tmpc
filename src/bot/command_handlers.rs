@@ -2,14 +2,10 @@ use log::{error, info};
 use mpd::{Client, Query, Song, search::Window};
 use rand::prelude::IndexedRandom;
 use std::{
-    env::temp_dir,
-    error::Error,
-    fs::{self, DirBuilder},
-    os::unix::net::UnixStream,
-    path::PathBuf,
-    process::Command,
-    time::Duration,
+    env::temp_dir, error::Error, fs::DirBuilder, os::unix::net::UnixStream, path::PathBuf,
+    process::Command, time::Duration,
 };
+use teloxide::types::FileId;
 #[cfg(feature = "local")]
 use teloxide::types::{FileId, InputFile};
 use teloxide::{
@@ -22,12 +18,29 @@ use tokio::fs::File as AsyncFile;
 
 use crate::{MPD_SOCKET_PATH, REACTION_EMOJI};
 
-use super::Commands;
+use super::{Commands, utils::get_current};
 type HandlerResultErr = Box<dyn Error + Send + Sync>;
 type HandlerResult = Result<(), HandlerResultErr>;
 
 pub async fn start(bot: Bot, msg: Message) -> HandlerResult {
-    bot.send_message(msg.chat.id, Commands::descriptions().to_string())
+    let buttons = vec![
+        vec![InlineKeyboardButton::callback("play/pause", "p")],
+        vec![
+            InlineKeyboardButton::callback("prev", "P"),
+            InlineKeyboardButton::callback("next", "n"),
+        ],
+        vec![InlineKeyboardButton::callback("shuffle", "s")],
+    ];
+    let buttons = InlineKeyboardMarkup {
+        inline_keyboard: buttons,
+    };
+
+    let text = {
+        let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+        get_current(&mut mpd)
+    };
+    bot.send_message(msg.chat.id, text)
+        .reply_markup(buttons)
         .await?;
     Ok(())
 }
@@ -39,8 +52,8 @@ pub async fn help(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn clear(bot: Bot, msg: Message) -> HandlerResult {
-    let mut conn = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
-    match conn.clear() {
+    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    match mpd.clear() {
         Ok(_) => {
             info!("Cleared queue");
             bot.set_message_reaction(msg.chat.id, msg.id)
@@ -50,7 +63,7 @@ pub async fn clear(bot: Bot, msg: Message) -> HandlerResult {
                 .await?;
         }
         Err(t) => {
-            error!("{}", t);
+            error!("{t}");
         }
     };
 
@@ -69,7 +82,7 @@ pub async fn play(bot: Bot, msg: Message) -> HandlerResult {
                 .await?;
         }
         Err(t) => {
-            error!("{}", t);
+            error!("{t}");
         }
     };
 
@@ -88,27 +101,10 @@ pub async fn next(bot: Bot, msg: Message) -> HandlerResult {
                 .await?;
         }
         Err(t) => {
-            error!("{}", t);
+            error!("{t}");
         }
     };
-    let Some(song) = mpd.currentsong()? else {
-        return Ok(());
-    };
-    let title = song.title.unwrap_or("Unknown".into());
-    let artist = song.artist.unwrap_or("Unknown".into());
-    let album = song
-        .tags
-        .into_iter()
-        .filter_map(|(name, val)| {
-            if name.to_lowercase().as_str() == "album" {
-                Some(val)
-            } else {
-                None
-            }
-        })
-        .collect::<String>();
-
-    let text = format!("🎵 {title}\n👤 {artist}\n💿 {album}");
+    let text = get_current(&mut mpd);
     bot.send_message(msg.chat.id, text)
         .reply_parameters(ReplyParameters {
             message_id: msg.id,
@@ -131,7 +127,7 @@ pub async fn prev(bot: Bot, msg: Message) -> HandlerResult {
                 .await?;
         }
         Err(t) => {
-            error!("{}", t);
+            error!("{t}");
         }
     };
 
@@ -175,7 +171,7 @@ pub async fn shuffle(bot: Bot, msg: Message) -> HandlerResult {
                 .await?;
         }
         Err(t) => {
-            error!("{}", t);
+            error!("{t}");
         }
     };
 
@@ -236,7 +232,7 @@ pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
             };
             info!("Got file path");
 
-            let db = sled::open("DB")?;
+            let db = sled::open("DB")?.open_tree("file_ids")?;
             if let Some(sticker) = db.get(&file_name)? {
                 let sticker = String::from_utf8_lossy(&sticker).to_string();
                 info!("Sending via file id");
@@ -282,7 +278,7 @@ pub async fn queue(bot: Bot, msg: Message) -> HandlerResult {
     let queue = match mpd.queue() {
         Ok(t) => t,
         Err(t) => {
-            error!("{}", t);
+            error!("{t}");
             return Ok(());
         }
     };
@@ -305,7 +301,7 @@ pub async fn queue(bot: Bot, msg: Message) -> HandlerResult {
     if queue_formatted.is_empty() {
         queue_formatted = "No song in queue".into();
     }
-    let text = format!("🎛Queue length: {}\n\n{queue_formatted}", queue_len);
+    let text = format!("🎛Queue length: {queue_len}\n\n{queue_formatted}");
     info!("Queue info sent");
     bot.send_message(msg.chat.id, text).await?;
 
@@ -413,6 +409,7 @@ pub async fn search(bot: Bot, msg: Message, query: String) -> HandlerResult {
         return Ok(());
     }
     let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    let db = sled::open("DB")?.open_tree("search")?;
     let mut q = Query::new();
     let query_mpd = q.and(mpd::Term::Tag("Title".into()), &query);
     let buttons = mpd
@@ -425,10 +422,11 @@ pub async fn search(bot: Bot, msg: Message, query: String) -> HandlerResult {
             let id = uuid::Uuid::now_v7().as_simple().to_string();
             let mut path = PathBuf::from("uuid/");
             path.push(&id);
-            let _ = fs::write(path, f.file);
+            db.insert(&id, f.file.as_bytes()).ok();
+            // let _ = fs::write(path, f.file);
             (text, id)
         })
-        .map(|(text, id)| vec![InlineKeyboardButton::callback(text, format!("{}i", id))])
+        .map(|(text, id)| vec![InlineKeyboardButton::callback(text, format!("{id}i"))])
         .collect::<Vec<_>>();
 
     if !buttons.is_empty() {
@@ -436,7 +434,7 @@ pub async fn search(bot: Bot, msg: Message, query: String) -> HandlerResult {
         let kbd = InlineKeyboardMarkup::new(buttons);
         bot.send_message(
             msg.chat.id,
-            format!("{} resluts found. Tap on a button to add to queue:", btns),
+            format!("{btns} resluts found. Tap on a button to add to queue:"),
         )
         .reply_markup(kbd)
         .await?;
@@ -474,20 +472,24 @@ pub async fn add_rand(bot: Bot, msg: Message, amount: String) -> HandlerResult {
 
     bot.send_message(
         msg.chat.id,
-        format!("Successfully added {} random songs to the queue", amount),
+        format!("Successfully added {amount} random songs to the queue"),
     )
     .await?;
     Ok(())
 }
 pub async fn add_all(bot: Bot, msg: Message) -> HandlerResult {
     let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    println!("test");
     let stats = mpd.stats()?;
+    println!("test");
     let all_songs = Song {
         file: "/".into(),
         ..Default::default()
     };
     mpd.push(all_songs)?;
+    println!("test");
     mpd.toggle_pause()?;
+    println!("test");
     bot.send_message(
         msg.chat.id,
         format!("Successfully added {} songs to the queue", stats.songs),
@@ -507,12 +509,14 @@ pub async fn add_file(bot: Bot, msg: Message) -> HandlerResult {
         }
     }
 
-    let Some(Some(audio)) = msg.reply_to_message().map(|x| x.audio()) else {
-        bot.send_message(
-            msg.chat.id,
-            "❌ No audio provided\nReply to a message with an audio file to add it to queue",
-        )
-        .await?;
+    let Some(replied_to) = msg.reply_to_message() else {
+        bot.send_message(msg.chat.id, "No message replied to")
+            .await?;
+        return Ok(());
+    };
+    let Some(audio) = replied_to.audio() else {
+        bot.send_message(msg.chat.id, "Message does not contain audio!")
+            .await?;
         return Ok(());
     };
 
@@ -553,7 +557,7 @@ pub async fn add_file(bot: Bot, msg: Message) -> HandlerResult {
         if let Err(e) = bot.download_file(&file.path, &mut output_file).await {
             match e {
                 teloxide::DownloadError::Network(error) => {
-                    error!("{}", error);
+                    error!("{error}");
                     bot.send_message(
                         chat_id,
                         "❌ Failed to download file due to a Network Error, try again",
@@ -565,7 +569,7 @@ pub async fn add_file(bot: Bot, msg: Message) -> HandlerResult {
                     .await?;
                 }
                 teloxide::DownloadError::Io(error) => {
-                    error!("{}", error);
+                    error!("{error}");
                     bot.send_message(chat_id, "❌ Failed to download file due to an I/O Error")
                         .reply_parameters(ReplyParameters {
                             message_id: msg_id,
@@ -585,7 +589,39 @@ pub async fn add_file(bot: Bot, msg: Message) -> HandlerResult {
         .await?;
     let current = mpd.currentsong()?.unwrap_or_default();
     let pos = current.place.unwrap_or_default().pos as usize;
-    mpd.insert(song, pos + 1)?;
+    if mpd.insert(&song, pos + 1).is_err() {
+        mpd.push(song)?;
+    };
+
+    Ok(())
+}
+
+pub async fn save(bot: Bot, msg: Message) -> HandlerResult {
+    let db = sled::open("DB")?.open_tree("file_ids")?;
+    let Some(replied_to) = msg.reply_to_message() else {
+        bot.send_message(msg.chat.id, "No message replied to")
+            .await?;
+        return Ok(());
+    };
+    let Some(audio) = replied_to.audio() else {
+        bot.send_message(msg.chat.id, "Message does not contain audio!")
+            .await?;
+        return Ok(());
+    };
+    let Some(file_name) = audio.file_name.clone() else {
+        bot.send_message(msg.chat.id, "Invalid audio file").await?;
+        return Ok(());
+    };
+
+    let FileId(file_id) = audio.file.id.clone();
+    db.insert(file_name, file_id.as_bytes())?;
+
+    bot.send_message(msg.chat.id, "Done! file saved and can be reused now <3")
+        .reply_parameters(ReplyParameters {
+            message_id: msg.id,
+            ..Default::default()
+        })
+        .await?;
 
     Ok(())
 }
