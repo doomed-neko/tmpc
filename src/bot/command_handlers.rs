@@ -5,7 +5,6 @@ use std::{
     env::temp_dir, error::Error, fs::DirBuilder, os::unix::net::UnixStream, path::PathBuf,
     process::Command, time::Duration,
 };
-use teloxide::types::FileId;
 #[cfg(feature = "local")]
 use teloxide::types::{FileId, InputFile};
 use teloxide::{
