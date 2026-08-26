@@ -7,12 +7,14 @@ use teloxide::types::UserId;
 pub struct Config {
     pub token: String,
     pub owner_id: UserId,
+    pub reaction_emoji: String,
     pub mpd: tokio::sync::Mutex<Client<UnixStream>>,
 }
 impl Config {
     pub fn parse() -> Result<Self, String> {
         let token =
             env::var("TMPC_TOKEN").map_err(|err| format!("Failed to read TMPC_TOKEN: {err}"))?;
+        let reaction_emoji = env::var("TMPC_REACTION_EMOJI").unwrap_or("🍾".into());
 
         let owner_id = env::var("TMPC_OWNER")
             .map_err(|err| format!("Failed to read TMPC_OWNER: {err}"))?
@@ -34,6 +36,7 @@ impl Config {
         Ok(Self {
             token,
             owner_id,
+            reaction_emoji,
             mpd,
         })
     }

@@ -1,12 +1,13 @@
 use log::{error, info};
-use mpd::{Client, Query, Song, search::Window};
+use mpd::{Query, Song, search::Window};
 use rand::prelude::IndexedRandom;
 use std::{
-    env::temp_dir, error::Error, fs::DirBuilder, os::unix::net::UnixStream, path::PathBuf,
-    process::Command, time::Duration,
+    env::temp_dir, error::Error, fs::DirBuilder, path::PathBuf, process::Command, sync::Arc,
+    time::Duration,
 };
+use teloxide::types::FileId;
 #[cfg(feature = "local")]
-use teloxide::types::{FileId, InputFile};
+use teloxide::types::InputFile;
 use teloxide::{
     net::Download,
     prelude::*,
@@ -15,13 +16,14 @@ use teloxide::{
 };
 use tokio::fs::File as AsyncFile;
 
-use crate::{MPD_SOCKET_PATH, REACTION_EMOJI};
+use crate::conf;
 
 use super::{Commands, utils::get_current};
 type HandlerResultErr = Box<dyn Error + Send + Sync>;
 type HandlerResult = Result<(), HandlerResultErr>;
 
-pub async fn start(bot: Bot, msg: Message) -> HandlerResult {
+pub async fn start(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     let buttons = vec![
         vec![InlineKeyboardButton::callback("play/pause", "p")],
         vec![
@@ -34,10 +36,7 @@ pub async fn start(bot: Bot, msg: Message) -> HandlerResult {
         inline_keyboard: buttons,
     };
 
-    let text = {
-        let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
-        get_current(&mut mpd)
-    };
+    let text = get_current(&mut mpd);
     bot.send_message(msg.chat.id, text)
         .reply_markup(buttons)
         .await?;
@@ -50,14 +49,14 @@ pub async fn help(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn clear(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+pub async fn clear(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     match mpd.clear() {
         Ok(_) => {
             info!("Cleared queue");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: REACTION_EMOJI.into(),
+                    emoji: conf.reaction_emoji.clone(),
                 }])
                 .await?;
         }
@@ -69,14 +68,14 @@ pub async fn clear(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn play(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+pub async fn play(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     match mpd.toggle_pause() {
         Ok(_) => {
             info!("Toggled playback");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: REACTION_EMOJI.into(),
+                    emoji: conf.reaction_emoji.clone(),
                 }])
                 .await?;
         }
@@ -88,14 +87,14 @@ pub async fn play(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn next(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+pub async fn next(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     match mpd.next() {
         Ok(_) => {
             info!("Next song");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: REACTION_EMOJI.into(),
+                    emoji: conf.reaction_emoji.clone(),
                 }])
                 .await?;
         }
@@ -114,14 +113,14 @@ pub async fn next(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn prev(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+pub async fn prev(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     match mpd.prev() {
         Ok(_) => {
             info!("Prev song");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: REACTION_EMOJI.into(),
+                    emoji: conf.reaction_emoji.clone(),
                 }])
                 .await?;
         }
@@ -158,14 +157,14 @@ pub async fn prev(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn shuffle(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+pub async fn shuffle(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     match mpd.shuffle(..) {
         Ok(_) => {
             info!("Prev song");
             bot.set_message_reaction(msg.chat.id, msg.id)
                 .reaction(vec![ReactionType::Emoji {
-                    emoji: REACTION_EMOJI.into(),
+                    emoji: conf.reaction_emoji.clone(),
                 }])
                 .await?;
         }
@@ -177,9 +176,9 @@ pub async fn shuffle(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
+pub async fn curr(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
     info!("Current song info sent");
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    let mut mpd = conf.mpd.lock().await;
     let song = match mpd.currentsong()? {
         Some(t) => t,
         None => {
@@ -207,7 +206,9 @@ pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
 
     #[cfg(feature = "local")]
     {
+        let conf_thread = conf.clone();
         tokio::spawn(async move {
+            let mut mpd = conf_thread.mpd.lock().await;
             let file_name = song.file;
             let Some(file_path) = mpd
                 .mounts()?
@@ -265,8 +266,8 @@ pub async fn curr(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn queue(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+pub async fn queue(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     let Some(current) = mpd.currentsong()? else {
         return Ok(());
     };
@@ -307,7 +308,7 @@ pub async fn queue(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn add_yt(bot: Bot, msg: Message) -> HandlerResult {
+pub async fn add_yt(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
     let Some(Some(url)) = msg
         .reply_to_message()
         .map(|x| x.text().map(|x| x.to_string()))
@@ -329,7 +330,7 @@ pub async fn add_yt(bot: Bot, msg: Message) -> HandlerResult {
 
     bot.set_message_reaction(msg.chat.id, msg.id)
         .reaction(vec![ReactionType::Emoji {
-            emoji: REACTION_EMOJI.into(),
+            emoji: conf.reaction_emoji.clone(),
         }])
         .await?;
     bot.send_message(
@@ -377,8 +378,8 @@ fn humanize_duration(dur: Duration) -> String {
     dur.human(Truncate::Second).to_string()
 }
 
-pub async fn stats(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+pub async fn stats(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     let stats = mpd.stats()?;
     let artists = stats.artists;
     let albums = stats.albums;
@@ -397,7 +398,12 @@ total duration: {db_playtime}"#
     Ok(())
 }
 
-pub async fn search(bot: Bot, msg: Message, query: String) -> HandlerResult {
+pub async fn search(
+    bot: Bot,
+    msg: Message,
+    query: String,
+    conf: Arc<conf::Config>,
+) -> HandlerResult {
     if query.is_empty() {
         bot.send_message(
             msg.chat.id,
@@ -407,7 +413,7 @@ pub async fn search(bot: Bot, msg: Message, query: String) -> HandlerResult {
         .await?;
         return Ok(());
     }
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    let mut mpd = conf.mpd.lock().await;
     let db = sled::open("DB")?.open_tree("search")?;
     let mut q = Query::new();
     let query_mpd = q.and(mpd::Term::Tag("Title".into()), &query);
@@ -444,7 +450,12 @@ pub async fn search(bot: Bot, msg: Message, query: String) -> HandlerResult {
     Ok(())
 }
 
-pub async fn add_rand(bot: Bot, msg: Message, amount: String) -> HandlerResult {
+pub async fn add_rand(
+    bot: Bot,
+    msg: Message,
+    amount: String,
+    conf: Arc<conf::Config>,
+) -> HandlerResult {
     let amount = if amount.is_empty() {
         "1".into()
     } else {
@@ -455,18 +466,18 @@ pub async fn add_rand(bot: Bot, msg: Message, amount: String) -> HandlerResult {
         return Ok(());
     };
 
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH).unwrap()).unwrap();
-    let mut current = mpd
+    let mut mpd = conf.mpd.lock().await;
+    let songs = mpd.listall()?;
+    let songs = songs.sample(&mut rand::rng(), amount).cloned();
+    for (current, song) in (mpd
         .currentsong()?
         .unwrap_or_default()
         .place
         .unwrap_or_default()
-        .pos as usize;
-    let songs = mpd.listall()?;
-    let songs = songs.choose_multiple(&mut rand::rng(), amount).cloned();
-    for song in songs {
-        mpd.insert(song, current)?;
-        current += 1;
+        .pos as usize..)
+        .zip(songs)
+    {
+        mpd.insert(song, current + 1)?;
     }
 
     bot.send_message(
@@ -476,8 +487,8 @@ pub async fn add_rand(bot: Bot, msg: Message, amount: String) -> HandlerResult {
     .await?;
     Ok(())
 }
-pub async fn add_all(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+pub async fn add_all(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     println!("test");
     let stats = mpd.stats()?;
     println!("test");
@@ -498,8 +509,8 @@ pub async fn add_all(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn add_file(bot: Bot, msg: Message) -> HandlerResult {
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+pub async fn add_file(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    let mut mpd = conf.mpd.lock().await;
     {
         let mut tmp = temp_dir();
         tmp.push("tmpc");

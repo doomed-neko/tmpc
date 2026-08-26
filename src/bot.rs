@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use callback_query_handlers::callback_query_handler;
 use command_handlers::*;
 use teloxide::{
@@ -11,7 +13,7 @@ use teloxide::{
     types::{Message, Update},
 };
 
-use crate::OWNER_ID;
+use crate::conf;
 
 mod callback_query_handlers;
 mod command_handlers;
@@ -62,10 +64,12 @@ pub enum BotState {
     #[default]
     Start,
 }
-pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn schema(
+    conf: Arc<conf::Config>,
+) -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     let cmd_handler = filter_command::<Commands, _>()
         .branch(
-            dptree::filter(|msg: Message| msg.from.is_some_and(|x| x.id == OWNER_ID))
+            dptree::filter(move |msg: Message| msg.from.is_some_and(|x| x.id == conf.owner_id))
                 .branch(case![Commands::Play].endpoint(play))
                 .branch(case![Commands::Next].endpoint(next))
                 .branch(case![Commands::Clear].endpoint(clear))

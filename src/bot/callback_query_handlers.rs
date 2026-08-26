@@ -1,25 +1,29 @@
 use log::warn;
-use mpd::{Client, Query};
-use std::{error::Error, os::unix::net::UnixStream};
+use mpd::Query;
+use std::{error::Error, sync::Arc};
 use teloxide::{
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup},
 };
 
-use crate::{MPD_SOCKET_PATH, OWNER_ID};
+use crate::conf;
 
 use super::utils::get_current;
 pub type CallbackReturn = Result<(), Box<dyn Error + Send + Sync>>;
 
-pub async fn callback_query_handler(bot: Bot, q: CallbackQuery) -> CallbackReturn {
-    if q.from.id != OWNER_ID {
+pub async fn callback_query_handler(
+    bot: Bot,
+    q: CallbackQuery,
+    conf: Arc<conf::Config>,
+) -> CallbackReturn {
+    if q.from.id != conf.owner_id {
         bot.answer_callback_query(q.id)
             .show_alert(true)
             .text("You can't use this command")
             .await?;
         return Ok(());
     }
-    let mut mpd = Client::new(UnixStream::connect(MPD_SOCKET_PATH)?)?;
+    let mut mpd = conf.mpd.lock().await;
     let buttons = vec![
         vec![InlineKeyboardButton::callback("play/pause", "p")],
         vec![
