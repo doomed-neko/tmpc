@@ -8,10 +8,6 @@ use teloxide::{dispatching::dialogue::InMemStorage, prelude::*};
 mod bot;
 mod conf;
 
-// pub const MPD_SOCKET_PATH: &str = "/home/main/.config/mpd/socket";
-// pub const REACTION_EMOJI: &str = "🍾";
-// pub const OWNER_ID: UserId = UserId(8945237520);
-
 #[tokio::main]
 async fn main() {
     dotenv::dotenv().ok();
