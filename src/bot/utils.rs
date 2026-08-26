@@ -3,7 +3,7 @@ use std::sync::Arc;
 use mpd::Song;
 use teloxide::{prelude::*, types::ReactionType};
 
-use crate::{bot::HandlerResult, conf};
+use crate::conf;
 
 pub fn format_song(song: Option<Song>) -> String {
     if let Some(song) = song {
@@ -23,11 +23,11 @@ pub fn format_song(song: Option<Song>) -> String {
     }
 }
 
-pub async fn react_to_msg(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+pub async fn react_to_msg(bot: Bot, msg: Message, conf: Arc<conf::Config>) {
     bot.set_message_reaction(msg.chat.id, msg.id)
         .reaction(vec![ReactionType::Emoji {
             emoji: conf.reaction_emoji.clone(),
         }])
-        .await?;
-    Ok(())
+        .await
+        .ok();
 }
