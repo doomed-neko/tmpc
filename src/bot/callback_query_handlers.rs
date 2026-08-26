@@ -9,7 +9,7 @@ use teloxide::{
 
 use crate::conf;
 
-use super::utils::get_current;
+use super::utils::format_song;
 
 pub async fn callback_query_handler(
     bot: Bot,
@@ -23,19 +23,19 @@ pub async fn callback_query_handler(
             .await?;
         return Ok(());
     }
-    let mut mpd = conf.mpd.lock().await;
-    let buttons = vec![
-        vec![InlineKeyboardButton::callback("play/pause", "p")],
-        vec![
-            InlineKeyboardButton::callback("prev", "P"),
-            InlineKeyboardButton::callback("next", "n"),
-        ],
-        vec![InlineKeyboardButton::callback("shuffle", "s")],
-    ];
-    let buttons = InlineKeyboardMarkup {
-        inline_keyboard: buttons,
-    };
     let msg = q.message.unwrap();
+    let mut mpd = conf.mpd.lock().await;
+    let current_song = mpd.currentsong()?;
+    let buttons = InlineKeyboardMarkup {
+        inline_keyboard: vec![
+            vec![InlineKeyboardButton::callback("play/pause", "p")],
+            vec![
+                InlineKeyboardButton::callback("prev", "P"),
+                InlineKeyboardButton::callback("next", "n"),
+            ],
+            vec![InlineKeyboardButton::callback("shuffle", "s")],
+        ],
+    };
     let Some(mut data) = q.data else {
         return Ok(());
     };
@@ -69,21 +69,21 @@ pub async fn callback_query_handler(
         }
         'p' => {
             mpd.toggle_pause()?;
-            bot.edit_message_text(msg.chat().id, msg.id(), get_current(&mut mpd))
+            bot.edit_message_text(msg.chat().id, msg.id(), format_song(current_song))
                 .reply_markup(buttons)
                 .await?;
             bot.answer_callback_query(q.id).await?;
         }
         'n' => {
             mpd.next()?;
-            bot.edit_message_text(msg.chat().id, msg.id(), get_current(&mut mpd))
+            bot.edit_message_text(msg.chat().id, msg.id(), format_song(current_song))
                 .reply_markup(buttons)
                 .await?;
             bot.answer_callback_query(q.id).await?;
         }
         'P' => {
             mpd.prev()?;
-            bot.edit_message_text(msg.chat().id, msg.id(), get_current(&mut mpd))
+            bot.edit_message_text(msg.chat().id, msg.id(), format_song(current_song))
                 .reply_markup(buttons)
                 .await?;
             bot.answer_callback_query(q.id).await?;

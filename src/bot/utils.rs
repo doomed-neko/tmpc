@@ -1,32 +1,26 @@
-use std::{os::unix::net::UnixStream, sync::Arc};
+use std::sync::Arc;
 
-use mpd::Client;
+use mpd::Song;
 use teloxide::{prelude::*, types::ReactionType};
 
 use crate::{bot::HandlerResult, conf};
 
-pub fn get_current(mpd: &mut Client<UnixStream>) -> String {
-    let song = mpd
-        .currentsong()
-        .ok()
-        .unwrap_or_default()
-        .unwrap_or_default();
+pub fn format_song(song: Option<Song>) -> String {
+    if let Some(song) = song {
+        let unknown = String::from("Unknown");
+        let title = song.title.unwrap_or(unknown.clone());
+        let artist = song.artist.unwrap_or(unknown.clone());
+        let album = song
+            .tags
+            .into_iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("album"))
+            .map(|(_, val)| val)
+            .unwrap_or(unknown.clone());
 
-    let title = song.title.unwrap_or("Unknown".into());
-    let artist = song.artist.unwrap_or("Unknown".into());
-    let album = song
-        .tags
-        .into_iter()
-        .filter_map(|(name, val)| {
-            if name.to_lowercase().as_str() == "album" {
-                Some(val)
-            } else {
-                None
-            }
-        })
-        .collect::<String>();
-
-    format!("🎵 {title}\n👤 {artist}\n💿 {album}")
+        format!("🎵 {title}\n👤 {artist}\n💿 {album}")
+    } else {
+        String::from("🎵 No song playing right now")
+    }
 }
 
 pub async fn react_to_msg(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {

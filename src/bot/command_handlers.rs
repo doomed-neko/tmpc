@@ -1,5 +1,4 @@
 use crate::bot::HandlerResult;
-use crate::bot::HandlerResultErr;
 use log::{error, info};
 use mpd::{Query, Song, search::Window};
 use rand::prelude::IndexedRandom;
@@ -19,23 +18,23 @@ use tokio::fs::File as AsyncFile;
 
 use crate::conf;
 
-use super::{Commands, utils::get_current};
+use super::{Commands, utils::format_song};
 
 pub async fn start(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
     let mut mpd = conf.mpd.lock().await;
-    let buttons = vec![
-        vec![InlineKeyboardButton::callback("play/pause", "p")],
-        vec![
-            InlineKeyboardButton::callback("prev", "P"),
-            InlineKeyboardButton::callback("next", "n"),
-        ],
-        vec![InlineKeyboardButton::callback("shuffle", "s")],
-    ];
+    let current_song = mpd.currentsong()?;
     let buttons = InlineKeyboardMarkup {
-        inline_keyboard: buttons,
+        inline_keyboard: vec![
+            vec![InlineKeyboardButton::callback("play/pause", "p")],
+            vec![
+                InlineKeyboardButton::callback("prev", "P"),
+                InlineKeyboardButton::callback("next", "n"),
+            ],
+            vec![InlineKeyboardButton::callback("shuffle", "s")],
+        ],
     };
 
-    let text = get_current(&mut mpd);
+    let text = format_song(current_song);
     bot.send_message(msg.chat.id, text)
         .reply_markup(buttons)
         .await?;
@@ -78,6 +77,7 @@ pub async fn play(conf: Arc<conf::Config>) -> HandlerResult {
 
 pub async fn next(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
     let mut mpd = conf.mpd.lock().await;
+    let current_song = mpd.currentsong()?;
     match mpd.next() {
         Ok(_) => {
             info!("Next song");
@@ -86,7 +86,7 @@ pub async fn next(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRes
             error!("{t}");
         }
     };
-    let text = get_current(&mut mpd);
+    let text = format_song(current_song);
     bot.send_message(msg.chat.id, text)
         .reply_parameters(ReplyParameters {
             message_id: msg.id,
@@ -180,6 +180,7 @@ pub async fn curr(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRes
 
     #[cfg(feature = "local")]
     {
+        use crate::bot::HandlerResultErr;
         let conf_thread = conf.clone();
         tokio::spawn(async move {
             let mut mpd = conf_thread.mpd.lock().await;
