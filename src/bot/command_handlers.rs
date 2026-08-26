@@ -21,7 +21,7 @@ use crate::conf;
 use super::utils::format_song;
 
 pub async fn start(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let state_emoji = state_emoji(mpd.status()?);
     let current_song = mpd.currentsong()?;
     let buttons = InlineKeyboardMarkup {
@@ -52,7 +52,7 @@ pub async fn help(bot: Bot, msg: Message) -> HandlerResult {
 }
 
 pub async fn clear(conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     match mpd.clear() {
         Ok(_) => {
             info!("Cleared queue");
@@ -66,7 +66,7 @@ pub async fn clear(conf: Arc<conf::Config>) -> HandlerResult {
 }
 
 pub async fn play(conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     match mpd.toggle_pause() {
         Ok(_) => {
             info!("Toggled playback");
@@ -80,7 +80,7 @@ pub async fn play(conf: Arc<conf::Config>) -> HandlerResult {
 }
 
 pub async fn next(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let current_song = mpd.currentsong()?;
     match mpd.next() {
         Ok(_) => {
@@ -102,7 +102,7 @@ pub async fn next(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRes
 }
 
 pub async fn prev(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     match mpd.prev() {
         Ok(_) => {
             info!("Prev song");
@@ -141,7 +141,7 @@ pub async fn prev(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRes
 }
 
 pub async fn shuffle(conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     match mpd.shuffle(..) {
         Ok(_) => {
             info!("Prev song");
@@ -161,7 +161,7 @@ pub async fn curr(
     #[cfg(feature = "local")] app_state: Arc<app_state::AppState>,
 ) -> HandlerResult {
     info!("Current song info sent");
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let song = match mpd.currentsong()? {
         Some(t) => t,
         None => {
@@ -193,7 +193,7 @@ pub async fn curr(
         use std::path::PathBuf;
         let conf_thread = conf.clone();
         tokio::spawn(async move {
-            let mut mpd = conf_thread.mpd.lock().await;
+            let mut mpd = conf_thread.mpd()?;
             let song_path = song.file;
             let Some(file_path) = mpd.mounts()?.into_iter().find_map(|mount| {
                 let path = [&mount.storage, "/", &song_path].join("");
@@ -244,7 +244,7 @@ pub async fn curr(
 }
 
 pub async fn queue(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let Some(current) = mpd.currentsong()? else {
         return Ok(());
     };
@@ -351,7 +351,7 @@ fn humanize_duration(dur: Duration) -> String {
 }
 
 pub async fn stats(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let stats = mpd.stats()?;
     let artists = stats.artists;
     let albums = stats.albums;
@@ -386,7 +386,7 @@ pub async fn search(
         .await?;
         return Ok(());
     }
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let mut q = Query::new();
     let query_mpd = q.and(mpd::Term::Tag("Title".into()), &query);
     let buttons = mpd
@@ -434,7 +434,7 @@ pub async fn add_rand(
         return Ok(());
     };
 
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let songs = mpd.listall()?;
     let songs = songs.sample(&mut rand::rng(), amount).cloned();
     for (current, song) in (mpd
@@ -456,7 +456,7 @@ pub async fn add_rand(
     Ok(())
 }
 pub async fn add_all(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     println!("test");
     let stats = mpd.stats()?;
     println!("test");
@@ -478,7 +478,7 @@ pub async fn add_all(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> Handler
 }
 
 pub async fn add_file(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     {
         let mut tmp = temp_dir();
         tmp.push("tmpc");

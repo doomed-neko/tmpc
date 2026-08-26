@@ -15,7 +15,7 @@ pub async fn callback_query_handler(
     conf: Arc<conf::Config>,
     app_state: Arc<app_state::AppState>,
 ) -> CallbackReturn {
-    if q.from.id != conf.owner_id {
+    if q.from.id != conf.owner_id && conf.admin_mode {
         bot.answer_callback_query(q.id)
             .show_alert(true)
             .text("You can't use this command")
@@ -23,7 +23,7 @@ pub async fn callback_query_handler(
         return Ok(());
     }
     let msg = q.message.unwrap();
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let current_song = mpd.currentsong()?;
     let Some(data) = q.data else {
         return Ok(());

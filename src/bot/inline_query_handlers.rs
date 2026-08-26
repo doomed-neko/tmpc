@@ -25,7 +25,7 @@ pub async fn inline_query_handler(
     conf: Arc<conf::Config>,
     app_state: Arc<app_state::AppState>,
 ) -> CallbackReturn {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let artist_tag = "Artist";
     let title_tag = "Title";
     let user_query = q.query.trim();
@@ -75,7 +75,7 @@ pub async fn inline_msg_handler(
     conf: Arc<conf::Config>,
     app_state: Arc<app_state::AppState>,
 ) -> CallbackReturn {
-    let mut mpd = conf.mpd.lock().await;
+    let mut mpd = conf.mpd()?;
     let current_song = mpd.currentsong().unwrap_or_default();
     let Some(msg_id) = q.inline_message_id else {
         return Ok(());
