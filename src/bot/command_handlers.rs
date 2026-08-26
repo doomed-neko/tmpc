@@ -1,9 +1,10 @@
+use crate::bot::HandlerResult;
+use crate::bot::HandlerResultErr;
 use log::{error, info};
 use mpd::{Query, Song, search::Window};
 use rand::prelude::IndexedRandom;
 use std::{
-    env::temp_dir, error::Error, fs::DirBuilder, path::PathBuf, process::Command, sync::Arc,
-    time::Duration,
+    env::temp_dir, fs::DirBuilder, path::PathBuf, process::Command, sync::Arc, time::Duration,
 };
 use teloxide::types::FileId;
 #[cfg(feature = "local")]
@@ -11,7 +12,7 @@ use teloxide::types::InputFile;
 use teloxide::{
     net::Download,
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup, ReactionType, ReplyParameters},
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, ReplyParameters},
     utils::command::BotCommands,
 };
 use tokio::fs::File as AsyncFile;
@@ -19,8 +20,6 @@ use tokio::fs::File as AsyncFile;
 use crate::conf;
 
 use super::{Commands, utils::get_current};
-type HandlerResultErr = Box<dyn Error + Send + Sync>;
-type HandlerResult = Result<(), HandlerResultErr>;
 
 pub async fn start(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
     let mut mpd = conf.mpd.lock().await;
@@ -49,16 +48,11 @@ pub async fn help(bot: Bot, msg: Message) -> HandlerResult {
     Ok(())
 }
 
-pub async fn clear(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+pub async fn clear(conf: Arc<conf::Config>) -> HandlerResult {
     let mut mpd = conf.mpd.lock().await;
     match mpd.clear() {
         Ok(_) => {
             info!("Cleared queue");
-            bot.set_message_reaction(msg.chat.id, msg.id)
-                .reaction(vec![ReactionType::Emoji {
-                    emoji: conf.reaction_emoji.clone(),
-                }])
-                .await?;
         }
         Err(t) => {
             error!("{t}");
@@ -68,16 +62,11 @@ pub async fn clear(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRe
     Ok(())
 }
 
-pub async fn play(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+pub async fn play(conf: Arc<conf::Config>) -> HandlerResult {
     let mut mpd = conf.mpd.lock().await;
     match mpd.toggle_pause() {
         Ok(_) => {
             info!("Toggled playback");
-            bot.set_message_reaction(msg.chat.id, msg.id)
-                .reaction(vec![ReactionType::Emoji {
-                    emoji: conf.reaction_emoji.clone(),
-                }])
-                .await?;
         }
         Err(t) => {
             error!("{t}");
@@ -92,11 +81,6 @@ pub async fn next(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRes
     match mpd.next() {
         Ok(_) => {
             info!("Next song");
-            bot.set_message_reaction(msg.chat.id, msg.id)
-                .reaction(vec![ReactionType::Emoji {
-                    emoji: conf.reaction_emoji.clone(),
-                }])
-                .await?;
         }
         Err(t) => {
             error!("{t}");
@@ -118,11 +102,6 @@ pub async fn prev(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRes
     match mpd.prev() {
         Ok(_) => {
             info!("Prev song");
-            bot.set_message_reaction(msg.chat.id, msg.id)
-                .reaction(vec![ReactionType::Emoji {
-                    emoji: conf.reaction_emoji.clone(),
-                }])
-                .await?;
         }
         Err(t) => {
             error!("{t}");
@@ -157,16 +136,11 @@ pub async fn prev(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRes
     Ok(())
 }
 
-pub async fn shuffle(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+pub async fn shuffle(conf: Arc<conf::Config>) -> HandlerResult {
     let mut mpd = conf.mpd.lock().await;
     match mpd.shuffle(..) {
         Ok(_) => {
             info!("Prev song");
-            bot.set_message_reaction(msg.chat.id, msg.id)
-                .reaction(vec![ReactionType::Emoji {
-                    emoji: conf.reaction_emoji.clone(),
-                }])
-                .await?;
         }
         Err(t) => {
             error!("{t}");
@@ -308,7 +282,7 @@ pub async fn queue(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRe
     Ok(())
 }
 
-pub async fn add_yt(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+pub async fn add_yt(bot: Bot, msg: Message) -> HandlerResult {
     let Some(Some(url)) = msg
         .reply_to_message()
         .map(|x| x.text().map(|x| x.to_string()))
@@ -328,11 +302,6 @@ pub async fn add_yt(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerR
         url
     };
 
-    bot.set_message_reaction(msg.chat.id, msg.id)
-        .reaction(vec![ReactionType::Emoji {
-            emoji: conf.reaction_emoji.clone(),
-        }])
-        .await?;
     bot.send_message(
         msg.chat.id,
         "⏳ Downloading video... \nPlease wait, this might take a minute",

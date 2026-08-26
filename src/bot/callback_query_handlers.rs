@@ -1,6 +1,7 @@
+use crate::bot::CallbackReturn;
 use log::warn;
 use mpd::Query;
-use std::{error::Error, sync::Arc};
+use std::sync::Arc;
 use teloxide::{
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup},
@@ -9,7 +10,6 @@ use teloxide::{
 use crate::conf;
 
 use super::utils::get_current;
-pub type CallbackReturn = Result<(), Box<dyn Error + Send + Sync>>;
 
 pub async fn callback_query_handler(
     bot: Bot,

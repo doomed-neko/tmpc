@@ -1,6 +1,9 @@
-use std::os::unix::net::UnixStream;
+use std::{os::unix::net::UnixStream, sync::Arc};
 
 use mpd::Client;
+use teloxide::{prelude::*, types::ReactionType};
+
+use crate::{bot::HandlerResult, conf};
 
 pub fn get_current(mpd: &mut Client<UnixStream>) -> String {
     let song = mpd
@@ -24,4 +27,13 @@ pub fn get_current(mpd: &mut Client<UnixStream>) -> String {
         .collect::<String>();
 
     format!("🎵 {title}\n👤 {artist}\n💿 {album}")
+}
+
+pub async fn react_to_msg(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+    bot.set_message_reaction(msg.chat.id, msg.id)
+        .reaction(vec![ReactionType::Emoji {
+            emoji: conf.reaction_emoji.clone(),
+        }])
+        .await?;
+    Ok(())
 }

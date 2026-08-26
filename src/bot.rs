@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{error::Error, sync::Arc};
 
 use callback_query_handlers::callback_query_handler;
 use command_handlers::*;
@@ -13,11 +13,14 @@ use teloxide::{
     types::{Message, Update},
 };
 
-use crate::conf;
+use crate::{bot::utils::react_to_msg, conf};
 
 mod callback_query_handlers;
 mod command_handlers;
 mod utils;
+pub type CallbackReturn = Result<(), Box<dyn Error + Send + Sync>>;
+pub type HandlerResultErr = Box<dyn Error + Send + Sync>;
+pub type HandlerResult = Result<(), HandlerResultErr>;
 
 #[derive(BotCommands, Clone)]
 #[command(
@@ -68,6 +71,7 @@ pub fn schema(
     conf: Arc<conf::Config>,
 ) -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
     let cmd_handler = filter_command::<Commands, _>()
+        .endpoint(react_to_msg)
         .branch(
             dptree::filter(move |msg: Message| msg.from.is_some_and(|x| x.id == conf.owner_id))
                 .branch(case![Commands::Play].endpoint(play))
