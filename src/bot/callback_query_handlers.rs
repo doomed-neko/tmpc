@@ -1,7 +1,6 @@
 use crate::bot::{
     CallbackReturn, app_state, callback_query_commands::CallbackCmd, utils::state_emoji,
 };
-use log::warn;
 use mpd::Query;
 use std::sync::Arc;
 use teloxide::{
@@ -95,8 +94,26 @@ pub async fn callback_query_handler(
                 .text("Shuffled queue!")
                 .await?;
         }
-        a => {
-            warn!("Unhandled callback query command: {a}");
+        CallbackCmd::Play => {
+            mpd.play()?;
+            bot.answer_callback_query(q.id).text("Playing!").await?;
+        }
+        CallbackCmd::Pause => {
+            mpd.pause(true)?;
+            bot.answer_callback_query(q.id).text("Paused!").await?;
+        }
+        CallbackCmd::Stop => {
+            mpd.stop()?;
+            bot.answer_callback_query(q.id).text("Playing!").await?;
+        }
+        CallbackCmd::Clear => {
+            mpd.clear()?;
+            bot.answer_callback_query(q.id).text("Playing!").await?;
+        }
+        CallbackCmd::Unknown => {
+            bot.answer_callback_query(q.id)
+                .text("Unknown command!")
+                .await?;
         }
     }
     Ok(())
