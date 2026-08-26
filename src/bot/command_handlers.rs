@@ -1,36 +1,42 @@
-use crate::bot::HandlerResult;
+use crate::bot::{
+    HandlerResult, app_state, callback_query_commands::CallbackCmd, commands::Commands,
+    utils::state_emoji,
+};
 use log::{error, info};
-use mpd::{Query, Song, search::Window};
+use mpd::{Query, Song};
 use rand::prelude::IndexedRandom;
 use std::{
     env::temp_dir, fs::DirBuilder, path::PathBuf, process::Command, sync::Arc, time::Duration,
 };
-use teloxide::types::FileId;
 #[cfg(feature = "local")]
 use teloxide::types::InputFile;
+use teloxide::utils::command::BotCommands;
 use teloxide::{
     net::Download,
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup, ReplyParameters},
-    utils::command::BotCommands,
 };
 use tokio::fs::File as AsyncFile;
 
 use crate::conf;
 
-use super::{Commands, utils::format_song};
+use super::utils::format_song;
 
 pub async fn start(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
     let mut mpd = conf.mpd.lock().await;
+    let state_emoji = state_emoji(mpd.status()?);
     let current_song = mpd.currentsong()?;
     let buttons = InlineKeyboardMarkup {
         inline_keyboard: vec![
-            vec![InlineKeyboardButton::callback("play/pause", "p")],
             vec![
-                InlineKeyboardButton::callback("prev", "P"),
-                InlineKeyboardButton::callback("next", "n"),
+                InlineKeyboardButton::callback("⏮️", CallbackCmd::Previous),
+                InlineKeyboardButton::callback(state_emoji, CallbackCmd::PlayPause),
+                InlineKeyboardButton::callback("⏭️", CallbackCmd::Next),
             ],
-            vec![InlineKeyboardButton::callback("shuffle", "s")],
+            vec![InlineKeyboardButton::callback(
+                "🔀",
+                CallbackCmd::ShuffleQueue,
+            )],
         ],
     };
 
@@ -150,7 +156,12 @@ pub async fn shuffle(conf: Arc<conf::Config>) -> HandlerResult {
     Ok(())
 }
 
-pub async fn curr(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerResult {
+pub async fn curr(
+    bot: Bot,
+    msg: Message,
+    conf: Arc<conf::Config>,
+    app_state: Arc<app_state::AppState>,
+) -> HandlerResult {
     info!("Current song info sent");
     let mut mpd = conf.mpd.lock().await;
     let song = match mpd.currentsong()? {
@@ -184,34 +195,23 @@ pub async fn curr(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRes
         let conf_thread = conf.clone();
         tokio::spawn(async move {
             let mut mpd = conf_thread.mpd.lock().await;
-            let file_name = song.file;
-            let Some(file_path) = mpd
-                .mounts()?
-                .into_iter()
-                .filter_map(|x| {
-                    let path = format!("{}/{}", x.storage, file_name);
-                    let path_b = PathBuf::from(&file_name);
-                    if path_b.is_absolute() && path_b.exists() {
-                        return Some(file_name.clone());
-                    }
-                    if PathBuf::from(&path).exists() {
-                        return Some(path);
-                    }
-                    None
-                })
-                .next()
-            else {
-                bot.send_message(msg.chat.id, "Something wrong happened")
+            let song_path = song.file;
+            let Some(file_path) = mpd.mounts()?.into_iter().find_map(|mount| {
+                let path = [&mount.storage, "/", &song_path].join("");
+                if PathBuf::from(&path).exists() {
+                    return Some(path);
+                }
+                None
+            }) else {
+                bot.send_message(msg.chat.id, "Could not find song file")
                     .await?;
                 return Ok::<_, HandlerResultErr>(());
             };
             info!("Got file path");
 
-            let db = sled::open("DB")?.open_tree("file_ids")?;
-            if let Some(sticker) = db.get(&file_name)? {
-                let sticker = String::from_utf8_lossy(&sticker).to_string();
+            if let Some(file_id) = app_state.get_file_id(&song_path) {
                 info!("Sending via file id");
-                bot.send_audio(msg.chat.id, InputFile::file_id(FileId(sticker)))
+                bot.send_audio(msg.chat.id, InputFile::file_id(file_id))
                     .performer(artist)
                     .title(title)
                     .reply_parameters(ReplyParameters {
@@ -229,10 +229,13 @@ pub async fn curr(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> HandlerRes
                         ..Default::default()
                     })
                     .await
-                    .map(|x| {
-                        let file_id = x.audio().unwrap().file.id.clone().0;
-                        db.insert(&file_name, file_id.as_bytes())
-                    })??;
+                    .map(|sent_message| {
+                        let file_id = sent_message
+                            .audio()
+                            .map(|audio| audio.file.id.clone())
+                            .unwrap();
+                        app_state.cache_file_id(song_path, file_id);
+                    })?;
             }
             Ok(())
         })
@@ -373,6 +376,7 @@ pub async fn search(
     msg: Message,
     query: String,
     conf: Arc<conf::Config>,
+    app_state: Arc<app_state::AppState>,
 ) -> HandlerResult {
     if query.is_empty() {
         bot.send_message(
@@ -384,24 +388,19 @@ pub async fn search(
         return Ok(());
     }
     let mut mpd = conf.mpd.lock().await;
-    let db = sled::open("DB")?.open_tree("search")?;
     let mut q = Query::new();
     let query_mpd = q.and(mpd::Term::Tag("Title".into()), &query);
     let buttons = mpd
-        .search(query_mpd, Window::from((0, 95)))?
+        .search(query_mpd, (0, 95))?
         .into_iter()
-        .map(|f| {
-            let title = f.title.unwrap_or("Unknown".into());
-            let artist = f.artist.unwrap_or("Unknown".into());
+        .map(|song| {
+            let title = song.title.unwrap_or("Unknown".into());
+            let artist = song.artist.unwrap_or("Unknown".into());
             let text = [artist, "-".into(), title].join(" ");
-            let id = uuid::Uuid::now_v7().as_simple().to_string();
-            let mut path = PathBuf::from("uuid/");
-            path.push(&id);
-            db.insert(&id, f.file.as_bytes()).ok();
-            // let _ = fs::write(path, f.file);
+            let id = app_state.cache_track(song.file);
             (text, id)
         })
-        .map(|(text, id)| vec![InlineKeyboardButton::callback(text, format!("{id}i"))])
+        .map(|(text, id)| vec![InlineKeyboardButton::callback(text, CallbackCmd::Add(id))])
         .collect::<Vec<_>>();
 
     if !buttons.is_empty() {
@@ -572,36 +571,6 @@ pub async fn add_file(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> Handle
     if mpd.insert(&song, pos + 1).is_err() {
         mpd.push(song)?;
     };
-
-    Ok(())
-}
-
-pub async fn save(bot: Bot, msg: Message) -> HandlerResult {
-    let db = sled::open("DB")?.open_tree("file_ids")?;
-    let Some(replied_to) = msg.reply_to_message() else {
-        bot.send_message(msg.chat.id, "No message replied to")
-            .await?;
-        return Ok(());
-    };
-    let Some(audio) = replied_to.audio() else {
-        bot.send_message(msg.chat.id, "Message does not contain audio!")
-            .await?;
-        return Ok(());
-    };
-    let Some(file_name) = audio.file_name.clone() else {
-        bot.send_message(msg.chat.id, "Invalid audio file").await?;
-        return Ok(());
-    };
-
-    let FileId(file_id) = audio.file.id.clone();
-    db.insert(file_name, file_id.as_bytes())?;
-
-    bot.send_message(msg.chat.id, "Done! file saved and can be reused now <3")
-        .reply_parameters(ReplyParameters {
-            message_id: msg.id,
-            ..Default::default()
-        })
-        .await?;
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use mpd::Song;
+use mpd::{Song, State, Status};
 use teloxide::{prelude::*, types::ReactionType};
 
 use crate::conf;
@@ -30,4 +30,13 @@ pub async fn react_to_msg(bot: Bot, msg: Message, conf: Arc<conf::Config>) {
         }])
         .await
         .ok();
+}
+
+pub fn state_emoji(player_status: Status) -> String {
+    match player_status.state {
+        State::Stop => "▶️",
+        State::Play => "⏸️",
+        State::Pause => "▶️",
+    }
+    .to_string()
 }

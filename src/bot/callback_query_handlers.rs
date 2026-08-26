@@ -1,4 +1,6 @@
-use crate::bot::CallbackReturn;
+use crate::bot::{
+    CallbackReturn, app_state, callback_query_commands::CallbackCmd, utils::state_emoji,
+};
 use log::warn;
 use mpd::Query;
 use std::sync::Arc;
@@ -15,6 +17,7 @@ pub async fn callback_query_handler(
     bot: Bot,
     q: CallbackQuery,
     conf: Arc<conf::Config>,
+    app_state: Arc<app_state::AppState>,
 ) -> CallbackReturn {
     if q.from.id != conf.owner_id {
         bot.answer_callback_query(q.id)
@@ -25,41 +28,39 @@ pub async fn callback_query_handler(
     }
     let msg = q.message.unwrap();
     let mut mpd = conf.mpd.lock().await;
+    let state_emoji = state_emoji(mpd.status()?);
     let current_song = mpd.currentsong()?;
     let buttons = InlineKeyboardMarkup {
         inline_keyboard: vec![
-            vec![InlineKeyboardButton::callback("play/pause", "p")],
             vec![
-                InlineKeyboardButton::callback("prev", "P"),
-                InlineKeyboardButton::callback("next", "n"),
+                InlineKeyboardButton::callback("⏮️", CallbackCmd::Previous),
+                InlineKeyboardButton::callback(state_emoji, CallbackCmd::PlayPause),
+                InlineKeyboardButton::callback("⏭️", CallbackCmd::Next),
             ],
-            vec![InlineKeyboardButton::callback("shuffle", "s")],
+            vec![InlineKeyboardButton::callback(
+                "🔀",
+                CallbackCmd::ShuffleQueue,
+            )],
         ],
     };
-    let Some(mut data) = q.data else {
+    let Some(data) = q.data else {
         return Ok(());
     };
-    let cmd = data.pop().unwrap();
-    match cmd {
-        'i' => {
-            let db = sled::open("DB")?.open_tree("search")?;
-            let Some(text) = db.get(&data)? else {
-                return Ok(());
-            };
-            let Some(song) = mpd
-                .find(
-                    Query::new().and(mpd::Term::File, String::from_utf8_lossy(&text)),
-                    None,
-                )?
-                .into_iter()
-                .next()
+    match CallbackCmd::from(data) {
+        CallbackCmd::Add(cached_id) => {
+            let Some(song) = app_state
+                .get_track(cached_id)
+                .and_then(|path| mpd.find(Query::new().and(mpd::Term::File, path), None).ok())
+                .and_then(|results| results.into_iter().next())
             else {
+                bot.answer_callback_query(q.id)
+                    .text("Invalid search, might have expired")
+                    .await?;
                 return Ok(());
             };
             let current = mpd
                 .currentsong()?
-                .unwrap_or_default()
-                .place
+                .and_then(|song| song.place)
                 .unwrap_or_default();
 
             mpd.insert(song, current.pos as usize + 1)?;
@@ -67,28 +68,28 @@ pub async fn callback_query_handler(
             bot.edit_message_text(msg.chat().id, msg.id(), "✅ Song added!")
                 .await?;
         }
-        'p' => {
+        CallbackCmd::PlayPause => {
             mpd.toggle_pause()?;
             bot.edit_message_text(msg.chat().id, msg.id(), format_song(current_song))
                 .reply_markup(buttons)
                 .await?;
             bot.answer_callback_query(q.id).await?;
         }
-        'n' => {
+        CallbackCmd::Next => {
             mpd.next()?;
             bot.edit_message_text(msg.chat().id, msg.id(), format_song(current_song))
                 .reply_markup(buttons)
                 .await?;
             bot.answer_callback_query(q.id).await?;
         }
-        'P' => {
+        CallbackCmd::Previous => {
             mpd.prev()?;
             bot.edit_message_text(msg.chat().id, msg.id(), format_song(current_song))
                 .reply_markup(buttons)
                 .await?;
             bot.answer_callback_query(q.id).await?;
         }
-        's' => {
+        CallbackCmd::ShuffleQueue => {
             mpd.shuffle(..)?;
             bot.answer_callback_query(q.id)
                 .text("Shuffled queue!")
