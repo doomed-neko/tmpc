@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+#[cfg(feature = "local")]
 use teloxide::types::FileId;
 
 // Shared state for your bot
 pub struct AppState {
     // Maps a short u32 ID to the full MPD file path
     pub track_cache: RwLock<HashMap<u32, String>>,
+    #[cfg(feature = "local")]
     pub file_id_cahce: RwLock<HashMap<String, FileId>>,
     pub next_id: AtomicU32,
 }
@@ -16,6 +18,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             track_cache: RwLock::new(HashMap::new()),
+            #[cfg(feature = "local")]
             file_id_cahce: RwLock::new(HashMap::new()),
             next_id: AtomicU32::new(1),
         }
@@ -30,7 +33,10 @@ impl AppState {
     pub fn get_track(&self, id: u32) -> Option<String> {
         self.track_cache.read().unwrap().get(&id).cloned()
     }
+}
 
+#[cfg(feature = "local")]
+impl AppState {
     pub fn cache_file_id(&self, file_path: String, file_id: FileId) {
         self.file_id_cahce
             .write()

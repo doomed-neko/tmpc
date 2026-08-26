@@ -5,9 +5,7 @@ use crate::bot::{
 use log::{error, info};
 use mpd::{Query, Song};
 use rand::prelude::IndexedRandom;
-use std::{
-    env::temp_dir, fs::DirBuilder, path::PathBuf, process::Command, sync::Arc, time::Duration,
-};
+use std::{env::temp_dir, fs::DirBuilder, process::Command, sync::Arc, time::Duration};
 #[cfg(feature = "local")]
 use teloxide::types::InputFile;
 use teloxide::utils::command::BotCommands;
@@ -160,7 +158,7 @@ pub async fn curr(
     bot: Bot,
     msg: Message,
     conf: Arc<conf::Config>,
-    app_state: Arc<app_state::AppState>,
+    #[cfg(feature = "local")] app_state: Arc<app_state::AppState>,
 ) -> HandlerResult {
     info!("Current song info sent");
     let mut mpd = conf.mpd.lock().await;
@@ -192,6 +190,7 @@ pub async fn curr(
     #[cfg(feature = "local")]
     {
         use crate::bot::HandlerResultErr;
+        use std::path::PathBuf;
         let conf_thread = conf.clone();
         tokio::spawn(async move {
             let mut mpd = conf_thread.mpd.lock().await;
@@ -572,5 +571,11 @@ pub async fn add_file(bot: Bot, msg: Message, conf: Arc<conf::Config>) -> Handle
         mpd.push(song)?;
     };
 
+    Ok(())
+}
+
+pub async fn msg_handler(bot: Bot, msg: Message) -> HandlerResult {
+    bot.send_message(msg.chat.id, Commands::descriptions().to_string())
+        .await?;
     Ok(())
 }

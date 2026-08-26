@@ -1,12 +1,9 @@
 use crate::bot::{
-    CallbackReturn, app_state, callback_query_commands::CallbackCmd, utils::state_emoji,
+    CallbackReturn, app_state, callback_query_commands::CallbackCmd, keyboards::dashboard_keyboard,
 };
 use mpd::Query;
 use std::sync::Arc;
-use teloxide::{
-    prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup},
-};
+use teloxide::prelude::*;
 
 use crate::conf;
 
@@ -27,25 +24,12 @@ pub async fn callback_query_handler(
     }
     let msg = q.message.unwrap();
     let mut mpd = conf.mpd.lock().await;
-    let state_emoji = state_emoji(mpd.status()?);
     let current_song = mpd.currentsong()?;
-    let buttons = InlineKeyboardMarkup {
-        inline_keyboard: vec![
-            vec![
-                InlineKeyboardButton::callback("⏮️", CallbackCmd::Previous),
-                InlineKeyboardButton::callback(state_emoji, CallbackCmd::PlayPause),
-                InlineKeyboardButton::callback("⏭️", CallbackCmd::Next),
-            ],
-            vec![InlineKeyboardButton::callback(
-                "🔀",
-                CallbackCmd::ShuffleQueue,
-            )],
-        ],
-    };
     let Some(data) = q.data else {
         return Ok(());
     };
     match CallbackCmd::from(data) {
+        CallbackCmd::PlayNow(_) => unreachable!(),
         CallbackCmd::Add(cached_id) => {
             let Some(song) = app_state
                 .get_track(cached_id)
@@ -70,21 +54,21 @@ pub async fn callback_query_handler(
         CallbackCmd::PlayPause => {
             mpd.toggle_pause()?;
             bot.edit_message_text(msg.chat().id, msg.id(), format_song(current_song))
-                .reply_markup(buttons)
+                .reply_markup(dashboard_keyboard(mpd.status()?))
                 .await?;
             bot.answer_callback_query(q.id).await?;
         }
         CallbackCmd::Next => {
             mpd.next()?;
             bot.edit_message_text(msg.chat().id, msg.id(), format_song(current_song))
-                .reply_markup(buttons)
+                .reply_markup(dashboard_keyboard(mpd.status()?))
                 .await?;
             bot.answer_callback_query(q.id).await?;
         }
         CallbackCmd::Previous => {
             mpd.prev()?;
             bot.edit_message_text(msg.chat().id, msg.id(), format_song(current_song))
-                .reply_markup(buttons)
+                .reply_markup(dashboard_keyboard(mpd.status()?))
                 .await?;
             bot.answer_callback_query(q.id).await?;
         }

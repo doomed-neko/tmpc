@@ -13,7 +13,10 @@ use teloxide::{
 
 use crate::{
     bot::{
-        callback_query_handlers::callback_query_handler, command_handlers, commands::Commands,
+        callback_query_handlers::callback_query_handler,
+        command_handlers,
+        commands::Commands,
+        inline_query_handlers::{inline_msg_handler, inline_query_handler},
         utils::react_to_msg,
     },
     conf,
@@ -50,10 +53,18 @@ pub fn schema(
         .chain(react_hook)
         .branch(commands_branch)
         .branch(public_commands_branch);
-    let msg_handler = Update::filter_message().branch(cmd_handler);
+    let msg_handler = Update::filter_message()
+        .branch(cmd_handler)
+        .endpoint(msg_handler);
     let callback_query_handler = Update::filter_callback_query().endpoint(callback_query_handler);
-    dialogue::enter::<Update, InMemStorage<BotState>, BotState, _>()
+    let inline_handler = Update::filter_inline_query().endpoint(inline_query_handler);
+    let inline_msg_handler = Update::filter_callback_query().endpoint(inline_msg_handler);
+    let dialogue_handler = dialogue::enter::<Update, InMemStorage<BotState>, BotState, _>()
         .branch(msg_handler)
-        .branch(callback_query_handler)
-        .endpoint(async || Ok(()))
+        .branch(callback_query_handler);
+
+    dptree::entry()
+        .branch(dialogue_handler)
+        .branch(inline_handler)
+        .branch(inline_msg_handler)
 }

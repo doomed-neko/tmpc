@@ -8,6 +8,7 @@ pub enum CallbackCmd {
     Previous,
     Next,
     Clear,
+    PlayNow(u32),
     Add(u32),
     ShuffleQueue,
     Unknown,
@@ -18,10 +19,15 @@ impl From<String> for CallbackCmd {
         let lower = value.to_lowercase();
 
         // Handle commands that might contain parameters separated by a colon, e.g., "search:my_query"
-        if lower.starts_with("search") {
+        if lower.starts_with("add") {
             let parts: Vec<&str> = value.splitn(2, ':').collect();
             let query = parts.get(1).map_or("", |s| s.trim()).parse().unwrap();
             return Self::Add(query);
+        }
+        if lower.starts_with("playnow") {
+            let parts: Vec<&str> = value.splitn(2, ':').collect();
+            let query = parts.get(1).map_or("", |s| s.trim()).parse().unwrap();
+            return Self::PlayNow(query);
         }
 
         match lower.as_str() {
@@ -49,8 +55,9 @@ impl From<CallbackCmd> for String {
             CallbackCmd::Previous => "previous".to_string(),
             CallbackCmd::Next => "next".to_string(),
             CallbackCmd::Clear => "clear".to_string(),
-            CallbackCmd::Add(query) => format!("search:{}", query),
+            CallbackCmd::Add(query) => format!("add:{}", query),
             CallbackCmd::ShuffleQueue => "shuffle_queue".to_string(),
+            CallbackCmd::PlayNow(query) => format!("playnow:{}", query),
             CallbackCmd::Unknown => "unknown".to_string(),
         }
     }
@@ -66,8 +73,9 @@ impl fmt::Display for CallbackCmd {
             Self::Previous => write!(f, "previous"),
             Self::Next => write!(f, "next"),
             Self::Clear => write!(f, "clear"),
-            Self::Add(query) => write!(f, "search:{}", query),
+            Self::Add(query) => write!(f, "add:{}", query),
             Self::ShuffleQueue => write!(f, "shuffle_queue"),
+            Self::PlayNow(query) => write!(f, "playnow:{}", query),
             Self::Unknown => write!(f, "unknown"),
         }
     }
